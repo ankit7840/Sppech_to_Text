@@ -3,26 +3,30 @@
     android:orientation="vertical"
     android:padding="16dp"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-<!--    <Spinner-->
-<!--        android:id="@+id/spinnerLanguages"-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:layout_marginBottom="16dp" />-->
+    android:layout_height="match_parent"
+    android:background="#F5F5F5"
+    >
 
 
     <Button
         android:id="@+id/btnStart"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Start" />
+        android:text="Start"
+        android:background="@drawable/button_background"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp" />
 
     <Button
         android:id="@+id/btnStop"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Stop" />
+        android:text="Stop"
+        android:background="@drawable/button_background"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp" />
 
     <TextView
         android:id="@+id/tvResult"
@@ -30,6 +34,8 @@
         android:layout_height="wrap_content"
         android:text="Recognized Text will appear here"
         android:padding="16dp"
-        android:textSize="18sp" />
-
+        android:textSize="18sp"
+        android:background="#FFFFFF"
+        android:elevation="4dp"
+        android:layout_marginBottom="16dp" />
 </LinearLayout>

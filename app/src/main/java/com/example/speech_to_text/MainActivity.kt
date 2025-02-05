@@ -1,35 +1,45 @@
 package com.example.speech_to_text
-import android.R.attr.action
+
+import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
-import android.Manifest
-import android.content.Intent
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 
-
 class MainActivity : AppCompatActivity() {
 
     private lateinit var speechRecognizer: SpeechRecognizer
     private lateinit var tvResult: TextView
+    private lateinit var btnStart: Button
+    private lateinit var btnStop: Button
+
     private val requestCodeAudioPermission = 1
+    private var isListening = false
+    private var isUserStopped = false
+    private val fullSpeechText = StringBuilder() // Stores complete sentence
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val btnStart = findViewById<Button>(R.id.btnStart)
-        val btnStop = findViewById<Button>(R.id.btnStop)
+        btnStart = findViewById(R.id.btnStart)
+        btnStop = findViewById(R.id.btnStop)
         tvResult = findViewById(R.id.tvResult)
+
+        btnStart.isEnabled = true
+        btnStop.isEnabled = false
 
         // Check for RECORD_AUDIO permission
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -42,14 +52,15 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // Check if Speech Recognition is available
+        // Initialize Speech Recognizer
         if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            Log.d("SpeechRecognizer", "Speech recognition is available.")
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         } else {
-            Log.d("SpeechRecognizer", "Speech recognition is NOT available.")
-            Toast.makeText(this, "Speech recognition is not available on this device. Please check your system settings.", Toast.LENGTH_LONG).show()
-            // Disable Start button
+            Toast.makeText(
+                this,
+                "Speech recognition is not available on this device.",
+                Toast.LENGTH_LONG
+            ).show()
             btnStart.isEnabled = false
             return
         }
@@ -74,8 +85,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onEndOfSpeech() {
-                tvResult.text = "Processing..."
                 Log.d("SpeechRecognizer", "Speech has ended")
+//                if (!isUserStopped) restartListening() // Continue after speech stops
             }
 
             override fun onError(error: Int) {
@@ -91,20 +102,44 @@ class MainActivity : AppCompatActivity() {
                     else -> "Unknown error occurred"
                 }
                 Log.d("SpeechRecognizer", "Error: $errorMessage")
-                tvResult.text = "Error: $errorMessage"
+//                tvResult.text = "Error: $errorMessage"
                 Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_SHORT).show()
+
+                // If there's an error, stop listening and finalize the sentence
+                    stopListening()
+//                  restartListening()
+
             }
 
-            override fun onResults(results: Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            // onPartialResults() is called continuously while the user is speaking
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
-                    tvResult.text = matches[0]
-                    Log.d("SpeechRecognizer", "Results: ${matches[0]}")
+                    val currentText = matches[0].trim()
+
+                    // Show real-time text as the user speaks
+                    val temporaryText = fullSpeechText.toString() + " " + currentText
+                    tvResult.text = temporaryText.trim()
+
+                    Log.d("SpeechRecognizer", "Partial Result: $currentText")
                 }
             }
 
-            override fun onPartialResults(partialResults: Bundle?) {
-                Log.d("SpeechRecognizer", "Partial results received")
+            // onResults() stores the final result after speech pauses
+            override fun onResults(results: Bundle?) {
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val finalText = matches[0].trim()
+
+                    // Append the recognized speech to the full text
+                    fullSpeechText.append(" ").append(finalText)
+//                    tvResult.text = fullSpeechText.toString().trim() // Display the full sentence
+
+                    Log.d("SpeechRecognizer", "Final Result: $finalText")
+                }
+
+                // Restart recognition for continuous speech
+//                if (!isUserStopped) restartListening()
             }
 
             override fun onEvent(eventType: Int, params: Bundle?) {
@@ -117,15 +152,9 @@ class MainActivity : AppCompatActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED
             ) {
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now")
-
-                }
-                Log.d("SpeechRecognizer", "Starting speech recognition...")
-                speechRecognizer.startListening(intent)
+                isUserStopped = false
+                fullSpeechText.clear() // Reset previous text
+                startListening()
             } else {
                 Toast.makeText(this, "Permission not granted!", Toast.LENGTH_SHORT).show()
             }
@@ -133,26 +162,60 @@ class MainActivity : AppCompatActivity() {
 
         // Stop Button
         btnStop.setOnClickListener {
-            Log.d("SpeechRecognizer", "Stopping speech recognition...")
-            speechRecognizer.stopListening()
+            stopListening()
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == requestCodeAudioPermission && grantResults.isNotEmpty()
-            && grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.d("SpeechRecognizer", "Permission granted.")
-        } else {
-            Log.d("SpeechRecognizer", "Permission denied.")
-            Toast.makeText(this, "Microphone permission is required for speech recognition.", Toast.LENGTH_LONG).show()
+    private fun startListening() {
+        if (!isListening) {
+
+            tvResult.text=""
+            isUserStopped=false
+            btnStart.isEnabled = false
+            btnStop.isEnabled = true
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+
+                // Increased silence timeout to handle longer pauses
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 10000)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 10000)
+            }
+
+            speechRecognizer.startListening(intent)
+            isListening = true
+            Log.d("SpeechRecognizer", "Started listening...")
         }
     }
+
+    private fun stopListening() {
+        if (isListening) {
+            isUserStopped = true // Prevent auto-restart
+
+            // Cancel ongoing recognition
+            speechRecognizer.cancel()
+            speechRecognizer.stopListening()
+            isListening = false
+
+
+            tvResult.text = fullSpeechText.toString().trim()
+            btnStart.isEnabled = true
+            btnStop.isEnabled = false
+
+            Log.d("SpeechRecognizer", "Stopped listening")
+        }
+    }
+
+//    private fun restartListening() {
+//        if (!isUserStopped) {
+//            Handler(Looper.getMainLooper()).postDelayed({
+//                startListening()
+//            },500) // Restart after 1.5 sec
+//        }
+//    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -162,3 +225,5 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+
