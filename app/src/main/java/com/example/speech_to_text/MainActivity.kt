@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private var isListening = false
     private var isUserStopped = false
     private val fullSpeechText = StringBuilder() // Stores complete sentence
+    private val finalResultText=StringBuilder()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +87,6 @@ class MainActivity : AppCompatActivity() {
 
             override fun onEndOfSpeech() {
                 Log.d("SpeechRecognizer", "Speech has ended")
-//                if (!isUserStopped) restartListening() // Continue after speech stops
             }
 
             override fun onError(error: Int) {
@@ -102,26 +102,30 @@ class MainActivity : AppCompatActivity() {
                     else -> "Unknown error occurred"
                 }
                 Log.d("SpeechRecognizer", "Error: $errorMessage")
-//                tvResult.text = "Error: $errorMessage"
                 Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_SHORT).show()
-
-                // If there's an error, stop listening and finalize the sentence
-                    stopListening()
-//                  restartListening()
-
+                stopListening()
             }
+
+            private var lastRecognizedText = ""
 
             // onPartialResults() is called continuously while the user is speaking
             override fun onPartialResults(partialResults: Bundle?) {
                 val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+
                 if (!matches.isNullOrEmpty()) {
-                    val currentText = matches[0].trim()
+                    val latestText = matches.last().trim()
 
-                    // Show real-time text as the user speaks
-                    val temporaryText = fullSpeechText.toString() + " " + currentText
-                    tvResult.text = temporaryText.trim()
+                    // Extract only new words by removing overlapping parts
+                    val newWords = latestText.removePrefix(lastRecognizedText).trim()
 
-                    Log.d("SpeechRecognizer", "Partial Result: $currentText")
+                    if (newWords.isNotEmpty()) {
+                        fullSpeechText.append(" ").append(newWords) // Append only new words
+                    }
+
+                    lastRecognizedText = latestText // Store last full recognized phrase
+                    tvResult.text = fullSpeechText.toString().trim()
+
+                    Log.d("SpeechRecognizer", "Partial Result: $newWords")
                 }
             }
 
@@ -130,16 +134,9 @@ class MainActivity : AppCompatActivity() {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
                     val finalText = matches[0].trim()
-
-                    // Append the recognized speech to the full text
-                    fullSpeechText.append(" ").append(finalText)
-//                    tvResult.text = fullSpeechText.toString().trim() // Display the full sentence
-
                     Log.d("SpeechRecognizer", "Final Result: $finalText")
+                    finalResultText.append(finalText)
                 }
-
-                // Restart recognition for continuous speech
-//                if (!isUserStopped) restartListening()
             }
 
             override fun onEvent(eventType: Int, params: Bundle?) {
@@ -200,22 +197,14 @@ class MainActivity : AppCompatActivity() {
             speechRecognizer.stopListening()
             isListening = false
 
-
             tvResult.text = fullSpeechText.toString().trim()
+
             btnStart.isEnabled = true
             btnStop.isEnabled = false
 
             Log.d("SpeechRecognizer", "Stopped listening")
         }
     }
-
-//    private fun restartListening() {
-//        if (!isUserStopped) {
-//            Handler(Looper.getMainLooper()).postDelayed({
-//                startListening()
-//            },500) // Restart after 1.5 sec
-//        }
-//    }
 
     override fun onDestroy() {
         super.onDestroy()
